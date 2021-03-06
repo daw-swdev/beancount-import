@@ -1174,6 +1174,8 @@ class ParsedOfxFile(object):
 
 
 def get_account_map(accounts):
+    import pdb
+    pdb.set_trace()
     account_to_ofx_id = dict()
     ofx_id_to_account = dict()
     cash_accounts = set()
@@ -1185,8 +1187,12 @@ def get_account_map(accounts):
         broker_id = entry.meta.get('ofx_broker_id')
         account_id = entry.meta.get('account_id')
         if org is None or broker_id is None or account_id is None:
-            continue
-        ofx_id = (org, broker_id, account_id)
+            bank_id = entry.meta.get('ofx_bank_id')
+            if bank_id is None or account_id is None:
+                continue
+            ofx_id = (bank_id, account_id)
+        else:
+            ofx_id = (org, broker_id, account_id)
         account_to_ofx_id[entry.account] = ofx_id
         ofx_id_to_account[ofx_id] = entry
         ofx_account_type = entry.meta.get('ofx_account_type')

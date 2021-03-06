@@ -538,6 +538,8 @@ class LineChangeBuilder(object):
         self.new_lineno = line_range[0] + line_delta
 
     def set_metadata(self, x: Directive, lineno: Optional[int] = None):
+        import pdb
+        pdb.set_trace()
         meta = dict({}, **(x.meta or {}))
         meta['filename'] = self.filename
         if lineno is None:

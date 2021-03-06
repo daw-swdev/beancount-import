@@ -367,6 +367,8 @@ class LoadedReconciler(object):
     """Represents the loaded reconciler state."""
 
     def __init__(self, reconciler, sources=None, classifier=None) -> None:
+        import pdb
+        pdb.set_trace()
         self.reconciler = reconciler
         reconciler.log_status('Loading journal')
         self.editor = journal_editor.JournalEditor(reconciler.journal_path,
