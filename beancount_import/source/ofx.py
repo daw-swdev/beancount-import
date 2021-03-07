@@ -281,9 +281,9 @@ generated:
         date: 2018-08-01
         ofx_fitid: "aedf1852aa39a54-623ee.4d104.5"
         ofx_type: "BUYSTOCK"
-      Assets:Investment:MyBank:Cash          -4115.86 USD                     
+      Assets:Investment:MyBank:Cash          -4115.86 USD
         ofx_fitid: "aedf1852aa39a54-623ee.4d104.5"
-      Expenses:Investment:MyBank:Fees         63.4869 USD                     
+      Expenses:Investment:MyBank:Fees         63.4869 USD
       Expenses:Investment:MyBank:Commission   23.0233 USD
 
     2018-08-01 * "SELLSTOCK"
@@ -291,10 +291,10 @@ generated:
         date: 2018-08-01
         ofx_fitid: "4a5141ead2c672e8a559.65-80e.b"
         ofx_type: "SELLSTOCK"
-      Income:MyBank:Capital-Gains:EEBHF                                           
-      Assets:Investment:MyBank:Cash            3382.60 USD                        
+      Income:MyBank:Capital-Gains:EEBHF
+      Assets:Investment:MyBank:Cash            3382.60 USD
         ofx_fitid: "4a5141ead2c672e8a559.65-80e.b"
-      Expenses:Investment:MyBank:Fees          31.9944 USD                        
+      Expenses:Investment:MyBank:Fees          31.9944 USD
       Expenses:Investment:MyBank:Commission    57.7239 USD
 
 Note that the cost of the shares is not specified in the generated SELL
@@ -317,8 +317,8 @@ created for posting to the `:Cash` account:
         date: 2011-07-15
         ofx_memo: "THIS IS A MEMO"
         ofx_type: "SELLMF"
-      Income:Vanguard:Capital-Gains:VFINX                            
-      Assets:Investment:Vanguard:Cash      4212.30 USD               
+      Income:Vanguard:Capital-Gains:VFINX
+      Assets:Investment:Vanguard:Cash      4212.30 USD
         ofx_fitid: "01234567890.0123.07152011.0"
 
     2011-07-15 * "Transfer due to: SELLMF - THIS IS A MEMO"
@@ -340,7 +340,7 @@ REINVEST transactions
         date: 2018-06-21
         ofx_fitid: "7c9254b784a.a9bd.edcfa27b.b"
         ofx_type: "REINVEST"
-      Income:Vanguard:Dividends:TYCDT            -93.21 USD             
+      Income:Vanguard:Dividends:TYCDT            -93.21 USD
 
 INCOME transactions
 -------------------
@@ -367,7 +367,7 @@ form are generated:
         ofx_fitid: "1234567890123456795AAA"
         ofx_memo: "Investment Expense"
         ofx_type: "TRANSFER"
-      Income:Vanguard:Capital-Gains:VANGUARD-92202V351                                                           
+      Income:Vanguard:Capital-Gains:VANGUARD-92202V351
       Expenses:FIXME                                                       1.67 USD
 
 The `ofx_memo`/`ofx_name` and `ofx_type` metadata fields provide features for
@@ -438,6 +438,8 @@ from . import ImportResult, Source, SourceResults, InvalidSourceReference
 from ..journal_editor import JournalEditor
 from ..matching import FIXME_ACCOUNT, CHECK_KEY
 from ..training import ExampleKeyValuePairs
+
+# DAW-DEBUG: import pdb
 
 
 # find_child function was derived from implementation in beancount/ingest/importers/ofx.pytest
@@ -598,12 +600,15 @@ TOLERANCE = 0.05
 
 class ParsedOfxStatement(object):
     def __init__(self, seen_fitids, filename, securities_map, org, stmtrs):
+        # DAW-DEBUG pdb.set_trace()
         filename = os.path.abspath(filename)
         self.filename = filename
         self.securities_map = securities_map
         self.org = org
         account_id = self.account_id = find_child(stmtrs, 'acctid')
-        self.broker_id = find_child(stmtrs, 'brokerid') or ''
+        # Use BANKID if BROKERID is not found in the ofx file.
+        self.broker_id = find_child(stmtrs, 'brokerid') \
+            or find_child(stmtrs, 'bankid') or ''
 
         self.currency = find_child(stmtrs, 'curdef')
         raw_transactions = self.raw_transactions = []
@@ -697,6 +702,7 @@ class ParsedOfxStatement(object):
                         filename=filename))
 
     def get_entries(self, prepare_state):
+        # DAW-DEBUG: pdb.set_trace()
         account = prepare_state.ofx_id_to_account.get(self.ofx_id)
         results = prepare_state.results
         if account is None:
@@ -1160,7 +1166,9 @@ class ParsedOfxFile(object):
         # Get the description of securities used in this file.
         securities_map = {s.uniqueid: s for s in get_securities(soup)}
 
-        org = find_child(soup, 'org') or ''
+        # DAW-DEBUG: pdb.set_trace()
+        # Use BANKID if ORG is not found in the ofx file.
+        org = find_child(soup, 'org') or find_child(soup, 'bankid') or ''
 
         # For each statement.
         for stmtrs in soup.find_all(re.compile('.*stmtrs$')):
@@ -1174,8 +1182,7 @@ class ParsedOfxFile(object):
 
 
 def get_account_map(accounts):
-    import pdb
-    pdb.set_trace()
+    # DAW-DEBUG: pdb.set_trace()
     account_to_ofx_id = dict()
     ofx_id_to_account = dict()
     cash_accounts = set()
@@ -1187,12 +1194,8 @@ def get_account_map(accounts):
         broker_id = entry.meta.get('ofx_broker_id')
         account_id = entry.meta.get('account_id')
         if org is None or broker_id is None or account_id is None:
-            bank_id = entry.meta.get('ofx_bank_id')
-            if bank_id is None or account_id is None:
                 continue
-            ofx_id = (bank_id, account_id)
-        else:
-            ofx_id = (org, broker_id, account_id)
+        ofx_id = (org, broker_id, account_id)
         account_to_ofx_id[entry.account] = ofx_id
         ofx_id_to_account[ofx_id] = entry
         ofx_account_type = entry.meta.get('ofx_account_type')
@@ -1333,6 +1336,7 @@ class OfxSource(Source):
                  cache_filename: Optional[str] = None,
                  **kwargs) -> None:
         super().__init__(**kwargs)
+        # TODO: DAW fix-up envvars here
         self.ofx_filenames = [os.path.realpath(x) for x in ofx_filenames]
         self.source_fitids = set()  # type: Set[FullFitid]
         self.parsed_files = []  # type: List[ParsedOfxFile]
