@@ -606,9 +606,7 @@ class ParsedOfxStatement(object):
         self.securities_map = securities_map
         self.org = org
         account_id = self.account_id = find_child(stmtrs, 'acctid')
-        # Use BANKID if BROKERID is not found in the ofx file.
-        self.broker_id = find_child(stmtrs, 'brokerid') \
-            or find_child(stmtrs, 'bankid') or ''
+        self.broker_id = find_child(stmtrs, 'brokerid') or ''
 
         self.currency = find_child(stmtrs, 'curdef')
         raw_transactions = self.raw_transactions = []
@@ -1167,8 +1165,7 @@ class ParsedOfxFile(object):
         securities_map = {s.uniqueid: s for s in get_securities(soup)}
 
         # DAW-DEBUG: pdb.set_trace()
-        # Use BANKID if ORG is not found in the ofx file.
-        org = find_child(soup, 'org') or find_child(soup, 'bankid') or ''
+        org = find_child(soup, 'org') or ''
 
         # For each statement.
         for stmtrs in soup.find_all(re.compile('.*stmtrs$')):
