@@ -39,17 +39,17 @@ downloaded and one file per commodity. So your source spec might look like this:
 
 This importer also makes use of certain metadata keys on your accounts. In order to label
 a beancount account as a Schwab account whose authoritative transaction source is this
-importer, specify the `schwab_account` metadata key as the account name exactly as it
+importer, specify the `schwab_account` metadata key as the account ID exactly as it
 appears in your Schwab CSV downloads. For example:
 
     2015-11-09 open Assets:Investments:Schwab:Brokerage-1234
-         schwab_account: "Brokerage XXXX-1234"
+         schwab_account: "XXXX-1234"
 
 You can also optionally specify accounts to be used for recording dividends, capital
 gains, interest, fees, and taxes:
 
     2015-11-09 open Assets:Investments:Schwab:Brokerage-1234
-         schwab_account: "Brokerage XXXX-1234"
+         schwab_account: "XXXX-1234"
          div_income_account: "Income:Dividend:Schwab"
          interest_income_account: "Income:Interest:Schwab"
          capital_gains_account: "Income:Capital-Gains:Schwab"
@@ -129,6 +129,7 @@ from beancount.core.data import (
     Balance,
     Directive,
     Meta,
+    Open,
     Posting,
     Price,
     Transaction,
@@ -143,7 +144,7 @@ from beancount_import.source import ImportResult, InvalidSourceReference, Source
 from beancount_import.source.description_based_source import (
     SOURCE_DESC_KEYS,
     DescriptionBasedSource,
-    get_account_mapping,
+    get_account_mapping as orig_get_account_mapping,
 )
 from beancount_import.unbook import group_postings_by_meta, unbook_postings
 
@@ -164,6 +165,7 @@ class BrokerageAction(enum.Enum):
     JOURNALED_SHARES = "Journaled Shares"
     LONG_TERM_CAP_GAIN = "Long Term Cap Gain"
     MARGIN_INTEREST = "Margin Interest"
+    CREDIT_INTEREST = "Credit Interest"
     MISC_CASH_ENTRY = "Misc Cash Entry"
     MONEYLINK_TRANSFER = "MoneyLink Transfer"
     PRIOR_YEAR_CASH_DIVIDEND = "Pr Yr Cash Div"
@@ -171,6 +173,7 @@ class BrokerageAction(enum.Enum):
     PROMOTIONAL_AWARD = "Promotional Award"
     QUAL_DIV_REINVEST = "Qual Div Reinvest"
     QUALIFIED_DIVIDEND = "Qualified Dividend"
+    NON_QUALIFIED_DIVIDEND = "Non-Qualified Div"
     REINVEST_DIVIDEND = "Reinvest Dividend"
     REINVEST_SHARES = "Reinvest Shares"
     SECURITY_TRANSFER = "Security Transfer"
@@ -185,11 +188,13 @@ class BrokerageAction(enum.Enum):
     STOCK_SPLIT = "Stock Split"
     WIRE_FUNDS = "Wire Funds"
     WIRE_FUNDS_RECEIVED = "Wire Funds Received"
+    FUNDS_RECEIVED = "Funds Received"
 
 class BankingEntryType(enum.Enum):
     # Please keep these alphabetized:
     ACH = "ACH"
     ATM = "ATM"
+    ATMREBATE = "ATMREBATE"
     CHECK = "CHECK"
     INTADJUST = "INTADJUST"
     TRANSFER = "TRANSFER"
@@ -231,6 +236,7 @@ class RawBankEntry(RawEntry):
     ) -> Optional[TransactionEntry]:
         interest_account = self.get_meta_account(account_meta,
                                             INTEREST_INCOME_ACCOUNT_KEY)
+        fees_account = self.get_meta_account(account_meta, FEES_ACCOUNT_KEY)
         shared_attrs: SharedAttrsDict = SharedAttrsDict(
             account=account,
             date=self.date,
@@ -247,15 +253,9 @@ class RawBankEntry(RawEntry):
                interest_account=interest_account,
                **shared_attrs,
             )
-        return TransactionEntry(
-            account=account,
-            date=self.date,
-            action=self.entry_type,
-            description=self.description,
-            amount=self.amount,
-            filename=self.filename,
-            line=self.line,
-        )
+        elif self.entry_type == BankingEntryType.ATMREBATE:
+            return BankFee(fees_account=fees_account, **shared_attrs)
+        return TransactionEntry(**shared_attrs)
 
 
 @dataclass(frozen=True)
@@ -275,6 +275,7 @@ class RawBrokerageEntry(RawEntry):
         interest_account = self.get_meta_account(account_meta, INTEREST_INCOME_ACCOUNT_KEY)
         dividend_account = self.get_meta_account(account_meta, DIV_INCOME_ACCOUNT_KEY)
         taxes_account = self.get_meta_account(account_meta, TAXES_ACCOUNT_KEY)
+        schwab_account = get_schwab_account_from_meta(account_meta)
         amount = self.amount
         if self.action == BrokerageAction.STOCK_PLAN_ACTIVITY:
             quantity = self.quantity
@@ -311,8 +312,7 @@ class RawBrokerageEntry(RawEntry):
                     **shared_attrs
             )
         if self.action == BrokerageAction.STOCK_PLAN_ACTIVITY:
-            acct = account_meta["schwab_account"]
-            cost = lots.get_cost(acct, self.symbol, self.date)
+            cost = lots.get_cost(schwab_account, self.symbol, self.date)
             return StockPlanActivity(symbol=self.symbol, cost=cost, **shared_attrs)
         if self.action in (
             BrokerageAction.CASH_DIVIDEND,
@@ -320,6 +320,7 @@ class RawBrokerageEntry(RawEntry):
             BrokerageAction.PRIOR_YEAR_SPECIAL_DIVIDEND,
             BrokerageAction.SPECIAL_DIVIDEND,
             BrokerageAction.QUALIFIED_DIVIDEND,
+            BrokerageAction.NON_QUALIFIED_DIVIDEND,
             BrokerageAction.QUAL_DIV_REINVEST,
             BrokerageAction.REINVEST_DIVIDEND,
         ):
@@ -334,9 +335,8 @@ class RawBrokerageEntry(RawEntry):
                 **shared_attrs,
             )
         if self.action == BrokerageAction.STOCK_SPLIT:
-            acct = account_meta["schwab_account"]
             assert self.quantity is not None
-            lot_splits = lots.split(acct, self.symbol, self.date, self.quantity)
+            lot_splits = lots.split(schwab_account, self.symbol, self.date, self.quantity)
             return StockSplit(
                 lot_splits=lot_splits,
                 **shared_attrs,
@@ -357,7 +357,8 @@ class RawBrokerageEntry(RawEntry):
                            BrokerageAction.JOURNALED_SHARES,
                            BrokerageAction.SECURITY_TRANSFER,
                            BrokerageAction.WIRE_FUNDS,
-                           BrokerageAction.WIRE_FUNDS_RECEIVED):
+                           BrokerageAction.WIRE_FUNDS_RECEIVED,
+                           BrokerageAction.FUNDS_RECEIVED):
             return Transfer(**shared_attrs)
         if self.action in (BrokerageAction.SELL,
                             BrokerageAction.SELL_TO_OPEN,
@@ -367,8 +368,7 @@ class RawBrokerageEntry(RawEntry):
             assert quantity is not None
             price = self.price
             assert price is not None
-            acct = account_meta["schwab_account"]
-            lot_info = lots.get_sale_lots(acct, self.symbol, self.date, quantity)
+            lot_info = lots.get_sale_lots(schwab_account, self.symbol, self.date, quantity)
             return Sell(
                 capital_gains_account=capital_gains_account,
                 fees_account=fees_account,
@@ -408,12 +408,12 @@ class RawBrokerageEntry(RawEntry):
             return Fee(fees_account=fees_account, **shared_attrs)
         if self.action == BrokerageAction.FOREIGN_TAX_PAID:
             return TaxPaid(taxes_account=taxes_account, **shared_attrs)
-        if self.action == BrokerageAction.MARGIN_INTEREST:
-            return MarginInterest(**shared_attrs)
+        if self.action == BrokerageAction.MARGIN_INTEREST or self.action == BrokerageAction.CREDIT_INTEREST:
+            return Interest(interest_account=interest_account, **shared_attrs)
         if self.action == BrokerageAction.EXPIRED:
             assert self.quantity is not None
             price = Decimal(0) if self.price is None else self.price
-            lot_info = lots.get_sale_lots(account_meta["schwab_account"], self.symbol, self.date, self.quantity)
+            lot_info = lots.get_sale_lots(schwab_account, self.symbol, self.date, self.quantity)
             if self.quantity > 0:
                 # an expiring long option means it is sold at the end => the posting has a negative 'quantity'
                 return Buy(
@@ -569,17 +569,17 @@ class TransactionEntry(DirectiveEntry):
 
 
 @dataclass(frozen=True)
-class Fee(TransactionEntry):
+class BankFee(TransactionEntry):
     fees_account: str
-
-    def get_sub_account(self) -> Optional[str]:
-        return "Cash"
 
     def get_other_account(self) -> str:
         return self.fees_account
 
-    def get_narration_prefix(self) -> str:
-        return "INVBANKTRAN"
+
+@dataclass(frozen=True)
+class Fee(BankFee):
+    def get_sub_account(self) -> Optional[str]:
+        return "Cash"
 
 
 @dataclass(frozen=True)
@@ -596,12 +596,14 @@ class TaxPaid(TransactionEntry):
         return "INVBANKTRAN"
 
 @dataclass(frozen=True)
-class MarginInterest(TransactionEntry):
+class Interest(TransactionEntry):
+    interest_account: str
+
     def get_sub_account(self) -> Optional[str]:
         return "Cash"
 
-    def get_narration_prefix(self) -> str:
-        return "MARGININTEREST"
+    def get_other_account(self) -> str:
+        return self.interest_account
 
 
 @dataclass(frozen=True)
@@ -1091,7 +1093,7 @@ class EntryProcessor:
         (
             self.account_to_schwab,
             self.schwab_to_account,
-        ) = get_account_mapping(journal.accounts, POSTING_META_ACCOUNT_KEY)
+        ) = get_account_mapping(journal.accounts)
         self.journal = journal
         self.lots = lots
         self.missing_accounts: Set[str] = set()
@@ -1134,11 +1136,28 @@ DIV_INCOME_ACCOUNT_KEY = "div_income_account"
 FEES_ACCOUNT_KEY = "fees_account"
 CAPITAL_GAINS_ACCOUNT_KEY = "capital_gains_account"
 TAXES_ACCOUNT_KEY = "taxes_account"
-TITLE_RE = re.compile(r'"?Transactions\s*for (?:Checking )?account '
-                      r'(?P<account>.+) as of '
-                      r'(?P<when>.+)"?')
+ACCOUNT_RE = r"(?P<account_type>[a-zA-Z\s]*\s+)?(?P<account>[^\s]+)"
+TITLE_RE = re.compile(
+    r'"?Transactions\s+for\s+(?:[a-zA-Z]*\s+)?account '
+    + ACCOUNT_RE +
+    r' as of (?P<when>.+)"?')
 OPTION_RE = re.compile(r'\w{1,4} \d\d\/\d\d\/\d\d\d\d \d*\.\d* [PC]')
 STRIP_FROM_SYMBOL_RE = re.compile(r'[^\d\w]')
+
+
+def get_schwab_account_from_meta(account_meta: Mapping[str, str]) -> str:
+    raw_acct = account_meta[POSTING_META_ACCOUNT_KEY]
+    # Because Schwab CSVs sometimes list accounts like "Foobar XXXX-1234" and
+    # sometimes like "XXXX-1234", we strip the initial part and only use the
+    # XXXX-1234 account ID. But for backward-compatibility we still need to
+    # support the longer names being used in the Beancount account meta.
+    return raw_acct.split()[-1]
+
+
+def get_account_mapping(accounts: Dict[str, Open]) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Wrap the base `get_account_mapping` with the account name to ID truncation."""
+    acct_to_id, id_to_acct = orig_get_account_mapping(accounts, POSTING_META_ACCOUNT_KEY)
+    return {a: i.split()[-1] for a, i in acct_to_id.items()}, {i.split()[-1]: a for i, a in id_to_acct.items()}
 
 
 class SchwabSourceSpecDict(TypedDict):
@@ -1357,11 +1376,6 @@ class LotsDB:
         for db in self.holdings.values():
             db.zero_fill(self.asof_datetimes)
 
-    def convert_account(self, acct: str) -> str:
-        # Transactions and positions CSV use accounts in the form "Brokerage XXXX-1234",
-        # but Lots CSV uses just "XXXX-1234"
-        return acct.split()[-1]
-
     def get_cost(
         self, account: str, symbol: str, date: datetime.date,
     ) -> Optional[Decimal]:
@@ -1369,7 +1383,7 @@ class LotsDB:
 
         Return None if it can't be determined given lot info in db.
         """
-        db = self.holdings.get((self.convert_account(account), symbol))
+        db = self.holdings.get((account, symbol))
         return db.get_cost(date) if db else None
 
     def get_sale_lots(
@@ -1389,14 +1403,14 @@ class LotsDB:
         every sale of a given holding, so things should match up exactly; if they don't,
         we revert to unknown cost.
         """
-        db = self.holdings.get((self.convert_account(account), symbol))
+        db = self.holdings.get((account, symbol))
         return db.get_sale_lots(date, quantity_sold) if db else {}
 
     def split(
         self, account: str, symbol: str, date: datetime.date, quantity_added: Decimal,
     ) -> List[LotSplit]:
         """Get LotSplit for each lot of `symbol` in `account` as of `date`."""
-        db = self.holdings.get((self.convert_account(account), symbol))
+        db = self.holdings.get((account, symbol))
         return db.split(date, quantity_added) if db else []
 
     def _get_db(self, account: str, symbol: str) -> HoldingLotsDB:
@@ -1626,10 +1640,10 @@ def _load_brokerage_transactions(reader: csv.DictReader, account: str,
 
 
 POSITIONS_TITLE_RE = re.compile(
-    r'"?Positions for (account )?(?P<account>.+) as of (?P<time>.+), '
+    r'"?Positions for ' + ACCOUNT_RE + ' as of (?P<time>.+), '
     r'(?P<date>[\d\/]+)"?'
 )
-POSITIONS_ACCT_RE = re.compile(r'"(?P<account>.+)"')
+POSITIONS_ACCT_RE = re.compile(f'"{ACCOUNT_RE}"')
 
 
 def _load_positions(filename: str) -> Sequence[RawPosition]:
@@ -1847,4 +1861,3 @@ def _convert_title_datetime(raw: str) -> datetime.datetime:
 
 def _convert_datetime(raw: str) -> datetime.datetime:
     return datetime.datetime.strptime(raw, DATETIME_FORMAT)
-
