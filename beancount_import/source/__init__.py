@@ -90,41 +90,56 @@ The other `Expenses:FIXME` accounts will be predicted individually.
 """
 
 import datetime
-from typing import Iterable, NamedTuple, List, Dict, Mapping, Any, Tuple, Union, Callable, Optional
 import importlib
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 
-from beancount.core.data import Transaction, Entries, Directive, Posting, Meta
+from beancount.core.data import Directive, Entries, Meta, Posting, Transaction
 
-if False:
-    from ..journal_editor import JournalEditor  # For type annotations only.
+from ..journal_editor import JournalEditor  # For type annotations only.
+from ..training import ExampleKeyValuePairs, PredictionInput, TrainingExamples
 
-from ..training import TrainingExamples, PredictionInput, ExampleKeyValuePairs
+ImportResult = NamedTuple(
+    "ImportResult",
+    [
+        ("date", datetime.date),
+        ("entries", Entries),
+        ("info", Optional[Mapping[str, Any]]),
+    ],
+)
 
-ImportResult = NamedTuple('ImportResult', [
-    ('date', datetime.date),
-    ('entries', Entries),
-    ('info', Optional[Mapping[str, Any]]),
-])
-
-InvalidSourceReference = NamedTuple('InvalidSourceReference', [
-    ('num_extras', int),
-    ('transaction_posting_pairs', List[Tuple[Transaction, Optional[Posting]]])
-])
+InvalidSourceReference = NamedTuple(
+    "InvalidSourceReference",
+    [
+        ("num_extras", int),
+        ("transaction_posting_pairs", List[Tuple[Transaction, Optional[Posting]]]),
+    ],
+)
 
 
-def invalid_source_reference_sort_key(
-        x: InvalidSourceReference) -> List[datetime.date]:
+def invalid_source_reference_sort_key(x: InvalidSourceReference) -> List[datetime.date]:
     return [p[0].date for p in x.transaction_posting_pairs]
 
 
 class SourceResults:
     def __init__(self):
         self.pending = []  # type: List[ImportResult]
-        self.accounts = set()  # type: Set[str]
+        self.accounts = set()  # type: set[str]
         self.invalid_references = []  # type: List[InvalidSourceReference]
         self.messages = []  # type: List[Tuple[str, str, Optional[Meta]]]
-        self.seen_messages = set(
-        )  # type: Set[Tuple[str, str, FrozenSet[Tuple[str, Any]]]]
+        self.seen_messages = (
+            set()
+        )  # type: set[Tuple[str, str, frozenset[Tuple[str, Any]]]]
 
     def add_pending_entry(self, entry: ImportResult):
         """Adds a generated ImportResult."""
@@ -149,18 +164,15 @@ class SourceResults:
         """Calls `add_invalid_reference` for each element in `r`."""
         self.invalid_references.extend(r)
 
-    def add_message(self,
-                    severity: str,
-                    message: str,
-                    source: Optional[Meta] = None):
+    def add_message(self, severity: str, message: str, source: Optional[Meta] = None):
         """Indicates that an error or warning occurred while importing data.
 
         :param source: If specified, indicates that the error relates to this
             metadata, which should have `filename` and `lineno` fields.
         """
-        key = (severity, message, frozenset(source.items())
-               if source else frozenset())
-        if key in self.seen_messages: return
+        key = (severity, message, frozenset(source.items()) if source else frozenset())
+        if key in self.seen_messages:
+            return
         self.seen_messages.add(key)
         self.messages.append((severity, message, source))
 
@@ -170,7 +182,7 @@ class SourceResults:
         :param source: If specified, indicates that the message relates to this
             metadata, which should have `filename` and `lineno` fields.
         """
-        self.add_message('warning', message, source)
+        self.add_message("warning", message, source)
 
     def add_error(self, message: str, source: Optional[Meta] = None):
         """Indicates that an error occurred while importing data.
@@ -178,7 +190,7 @@ class SourceResults:
         :param source: If specified, indicates that the message relates to this
             metadata, which should have `filename` and `lineno` fields.
         """
-        self.add_message('error', message, source)
+        self.add_message("error", message, source)
 
 
 ExampleKeyExtractorFunction = Callable[[Posting, Dict[str, str]], None]
@@ -188,13 +200,15 @@ ExampleKeyExtractor = Optional[ExampleKeyExtractorFunction]
 class AssociatedData:
     """Represents source data associated with a directive/posting."""
 
-    def __init__(self,
-                 description: str,
-                 type: str,
-                 path: Optional[str] = None,
-                 meta: Optional[Tuple[str, Any]] = None,
-                 link: Optional[str] = None,
-                 posting: Optional[Posting] = None):
+    def __init__(
+        self,
+        description: str,
+        type: str,
+        path: Optional[str] = None,
+        meta: Optional[Tuple[str, Any]] = None,
+        link: Optional[str] = None,
+        posting: Optional[Posting] = None,
+    ):
         """Initializes the associated data object.
 
         :param description: A textual description of the data.
@@ -242,9 +256,11 @@ class Source:
     def __init__(self, log_status: Callable[[str], None], **kwargs) -> None:
         super().__init__(**kwargs)  # type: ignore
         self.log_status = log_status
-        self.example_posting_key_extractors = dict(
+        self.example_posting_key_extractors = (
+            dict()
         )  # type: Dict[str, ExampleKeyExtractor]
-        self.example_transaction_key_extractors = dict(
+        self.example_transaction_key_extractors = (
+            dict()
         )  # type: Dict[str, ExampleKeyExtractor]
 
     @property
@@ -255,7 +271,7 @@ class Source:
         """
         raise NotImplementedError
 
-    def prepare(self, journal: 'JournalEditor', results: SourceResults) -> None:
+    def prepare(self, journal: "JournalEditor", results: SourceResults) -> None:
         """Processes `journal`, adding entries to `results`.
 
         Pending entries not already imported into the journal should be added by
@@ -283,8 +299,9 @@ class Source:
         del posting
         return False
 
-    def get_example_key_value_pairs(self, transaction: Transaction,
-                                    posting: Posting) -> ExampleKeyValuePairs:
+    def get_example_key_value_pairs(
+        self, transaction: Transaction, posting: Posting
+    ) -> ExampleKeyValuePairs:
         """Extracts training example key/value pairs for `posting`.
 
         This will only be called for postings with an account for which this
@@ -294,8 +311,7 @@ class Source:
         del posting
         return {}
 
-    def get_associated_data(self,
-                            entry: Directive) -> Optional[List[AssociatedData]]:
+    def get_associated_data(self, entry: Directive) -> Optional[List[AssociatedData]]:
         """Returns any associated data for this directive."""
         del entry
         return None
@@ -315,5 +331,5 @@ def load_source(source_spec: SourceSpec, log_status: LogFunction) -> Source:
     function defined in the specified `module`.
     """
     source_spec = source_spec.copy()
-    m = importlib.import_module(source_spec.pop('module'))
+    m = importlib.import_module(source_spec.pop("module"))
     return m.load(source_spec, log_status=log_status)  # type: ignore
