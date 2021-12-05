@@ -162,6 +162,41 @@ paycheck_rule_map = [
         "PLI Bonus",
         None,
     ),
+    PaycheckRule(
+        "paycheck_rsu_psu_stock_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "RSU/PSU Stock",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_life_ins_imp_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "Life Ins Imp Inc",
+        None,
+    ),
+        PaycheckRule(
+        "paycheck_emp_401k_match_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "401k Match - ER",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_hsa_emp_fam_seed_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "- HSA ER FAM Seed",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_cr_gift_award_tax_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "CR Gift Award TX",
+        None,
+    ),
 ]
 
 
@@ -369,12 +404,12 @@ class TxtFile:
                 lineno = txt_data.lineno
                 assert(self.filename == txt_data.filename)
             else:
-                self.log_status(f"WARNING: Field not found: '{rule.field_name}'")
+                self.log_status(f"Field '{rule.field_name}' not found in {self.filename}")
                 return None
         else:
             self.log_status(f"WARNING: Ignoring invalid rule: '{rule}'")
             return None
-        if "Salary" in rule.account_name:
+        if "Salary" in rule.account_name or "RSU" in rule.account_name:
             company = self.company
             employee = f"{self.first_name} {self.last_name}"
         else:
@@ -465,8 +500,8 @@ class PrepareState:
                     self.rules.append(rule)
 
         # Gather Imported Data from paycheck files
-        for rule in self.rules:
-            for txtfile in self.source.parsed_files:
+        for txtfile in self.source.parsed_files:
+            for rule in self.rules:
                 if rule.format != txtfile.format:
                     continue
                 account_data = txtfile.apply_account_rule(rule)
@@ -569,10 +604,11 @@ class PaycheckSource(Source):
                 result[key] = x
 
         if posting.meta is not None:
-            maybe_add_key(PAYCHECK_KEY_FILE)
             if "Salary" in posting.account:
                 maybe_add_key(PAYCHECK_KEY_COMPANY)
                 maybe_add_key(PAYCHECK_KEY_EMPLOYEE)
+
+            maybe_add_key(PAYCHECK_KEY_FILE)
         return result
 
     def is_posting_cleared(self, posting: Posting):
