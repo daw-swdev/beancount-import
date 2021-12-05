@@ -56,6 +56,7 @@ import datetime
 import fileinput
 import os
 import re
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import IntEnum, unique
 from glob import glob
@@ -135,6 +136,7 @@ class PaycheckRule:
     meta_key: str
     import_type: ImportedDataType
     format: PaycheckFormat
+    field_name: str
     regex: str
 
 
@@ -143,13 +145,22 @@ paycheck_rule_map = [
         "paycheck_salary_csco_ty2020",
         ImportedDataType.INCOME,
         PaycheckFormat.CSCO_TY2020,
-        "Salary - Exempt\s+-\s+-\s+(\d+,*\d+\.\d{2})\s+(\d+,*\d+\.\d{2})",
+        "Salary - Exempt",
+        None,
     ),
     PaycheckRule(
         "paycheck_salary_csco_ty2021",
         ImportedDataType.INCOME,
         PaycheckFormat.CSCO_TY2021,
-        "Regular Salary\s+\d+.\d{2}\s+(\d+,*\d+\.\d{2})\s+(\d+,*\d+\.\d{2})",
+        "Regular Salary",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_pli_bonus_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "PLI Bonus",
+        None,
     ),
 ]
 
@@ -161,6 +172,7 @@ class ImportAccountRule:
     format: PaycheckFormat
     currency: str
     data_regex: str
+    field_name: str
     filename: str
     lineno: int
 
@@ -173,7 +185,7 @@ class ImportedData:
     company: str
     employee: str
     date: datetime.date
-    description: str
+    narration: str
     memo: str
     units: Amount
     balance: Amount
@@ -199,7 +211,7 @@ class ImportedData:
 
 @dataclass
 class TxtData:
-    description: str
+    field_name: str
     data: List
     filename: str
     lineno: int
@@ -237,9 +249,9 @@ class TxtFile:
                 line = line.replace("  -  ", "     ")
                 # Convert negative currency parens with minus sign prefix
                 line = line.replace(")", "").replace("(", "-")
-                # Fix single space separated data & description values
+                # Fix single space separated data & field_name values
                 line = re.sub(f"({self.data_regex}) (\w)", r"\1  \2", line)
-                # Fix  single space separated description & values
+                # Fix  single space separated field_name & values
                 line = re.sub(f"(\w) ({self.data_regex})", r"\1  \2", line)
                 self._contents.append(line)
 
@@ -249,6 +261,12 @@ class TxtFile:
             if match:
                 return [True, match, lineno]
         return [False, None, None]
+
+    def find_in_txt_data(self, field_name) -> TxtData:
+        for txt_data in self.data:
+            if field_name == txt_data.field_name:
+                return txt_data
+        return None
 
     def verify_format(self):
         if (
@@ -293,7 +311,7 @@ class TxtFile:
             values = [x.lstrip() for x in list(filter(None, re.split(r"  ", line)))]
             if values and len(values) > 0:
                 column = None
-                description = None
+                field_name = None
                 gather_data = False
                 for i, token in enumerate(values):
                     # Convert negative numbers with trailing minus sign
@@ -305,64 +323,76 @@ class TxtFile:
                         if not gather_data:
                             gather_data = True
                             column = TxtData(
-                                description.getvalue(), [], self.filename, lineno
+                                field_name.getvalue(), [], self.filename, lineno
                             )
-                            description = None
+                            field_name = None
                         column.data.append(Decimal(token))
                     # Stop gathering data,
                     #   - add column to list,
-                    #   - start gathering description string
+                    #   - start gathering field_name string
                     elif gather_data:
                         assert column
                         raw_data.append(column)
                         gather_data = False
                         column = None
-                        description = StringIO()
-                        description.write(token)
-                    # Start gathering description string
-                    elif description is None:
-                        description = StringIO()
-                        description.write(token)
-                    # Continue gathering description string
+                        field_name = StringIO()
+                        field_name.write(token)
+                    # Start gathering field_name string
+                    elif field_name is None:
+                        field_name = StringIO()
+                        field_name.write(token)
+                    # Continue gathering field_name string
                     else:
-                        description.write(f" {token}")
+                        field_name.write(f" {token}")
                 if gather_data:
                     raw_data.append(column)
         for txt_data in raw_data:
             if len(txt_data.data) >= 2:
-                self.data.append(dict(line=lineno, data=txt_data))
+                self.data.append(txt_data)
 
         self.log_status(f"------[ {self.filename} ]------")
         [self.log_status(pformat(x, indent=2)) for x in self.data]
         self.log_status("########################")
 
-    def apply_account_rule(self, rule):
-        if rule.import_type == ImportedDataType.INCOME:
+    def apply_account_rule(self, rule) -> ImportedData:
+        if rule.data_regex is not None:
             found, match, lineno = self.find_in_contents(rule.data_regex)
             if not found:
                 return None
-            current_income = Decimal(match.group(1))
-            ytd_income = Decimal(match.group(2))
-            if "Salary" in rule.account_name:
-                company = self.company
-                employee = f"{self.first_name} {self.last_name}"
+            current_data = Decimal(match.group(1))
+            ytd_data = Decimal(match.group(2))
+        elif rule.field_name is not None:
+            txt_data = self.find_in_txt_data(rule.field_name)
+            if isinstance(txt_data, TxtData):
+                current_data = txt_data.data[-2]
+                ytd_data = txt_data.data[-1]
+                lineno = txt_data.lineno
+                assert(self.filename == txt_data.filename)
             else:
-                company = employee = None
-            return ImportedData(
-                rule.account_name,
-                rule.import_type,
-                rule.format,
-                company,
-                employee,
-                self.date,
-                paycheck_description(rule.format),
-                None,
-                Amount(current_income, rule.currency),
-                Amount(ytd_income, rule.currency),
-                self.filename,
-                lineno,
-            )
-        return None
+                self.log_status(f"WARNING: Field not found: '{rule.field_name}'")
+                return None
+        else:
+            self.log_status(f"WARNING: Ignoring invalid rule: '{rule}'")
+            return None
+        if "Salary" in rule.account_name:
+            company = self.company
+            employee = f"{self.first_name} {self.last_name}"
+        else:
+            company = employee = None
+        return ImportedData(
+            rule.account_name,
+            rule.import_type,
+            rule.format,
+            company,
+            employee,
+            self.date,
+            paycheck_narration(rule.format),
+            None,
+            Amount(current_data, rule.currency),
+            Amount(ytd_data, rule.currency),
+            self.filename,
+            lineno,
+        )
 
 
 def valid_filename(filename):
@@ -388,7 +418,7 @@ def valid_filename(filename):
     return is_valid
 
 
-def paycheck_description(fmt: PaycheckFormat):
+def paycheck_narration(fmt: PaycheckFormat):
     if fmt == PaycheckFormat.CSCO_TY2020 or fmt == PaycheckFormat.CSCO_TY2021:
         return "Paycheck - Cisco Systems, Inc."
     return "Paycheck - Unknown company"
@@ -410,7 +440,7 @@ class PrepareState:
         self.journal = journal
         self.results = results
         self.rules = []  # type: List[ImportAccountRule]
-        self.entry_map = dict()  # type: Dict[str, List[ImportedData]]
+        self.entry_map = OrderedDict()  # type: OrderedDict[str, List[ImportedData]]
         self.matching_transactions = []
 
         # Find paycheck account rules from paycheck metadata in account
@@ -428,6 +458,7 @@ class PrepareState:
                         paycheck_rule.format,
                         account.currencies[0],
                         paycheck_rule.regex,
+                        paycheck_rule.field_name,
                         filename,
                         account.meta.get("lineno"),
                     )
@@ -439,7 +470,7 @@ class PrepareState:
                 if rule.format != txtfile.format:
                     continue
                 account_data = txtfile.apply_account_rule(rule)
-                if account_data is not None:
+                if isinstance(account_data, ImportedData):
                     self.entry_map.setdefault(account_data.filename, []).append(
                         account_data
                     )
@@ -463,7 +494,7 @@ class PrepareState:
                 if PAYCHECK_KEY_COMPANY in posting.meta:
                     self.matching_transactions.append([entry, posting])
 
-    def find_accoun_import_type(self, account_name):
+    def find_account_import_type(self, account_name):
         for rule in self.rules:
             if rule.account_name == account_name:
                 return rule.import_type
@@ -479,7 +510,7 @@ class PrepareState:
                         date=imported_data.date,
                         flag=FLAG_OKAY,
                         payee=None,
-                        narration=imported_data.description,
+                        narration=imported_data.narration,
                         tags=EMPTY_SET,
                         links=EMPTY_SET,
                         postings=[],
