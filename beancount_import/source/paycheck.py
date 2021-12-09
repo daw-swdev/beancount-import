@@ -129,6 +129,8 @@ class ImportedDataType(IntEnum):
     INCOME = 1
     EXPENSE = 2
     DEPOSIT = 3
+    ESCROW = 4
+    REFUND = 5
 
 
 @dataclass
@@ -195,6 +197,20 @@ paycheck_rule_map = [
         ImportedDataType.INCOME,
         PaycheckFormat.CSCO_TY2021,
         "CR Gift Award TX",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_espp_escrow_csco_ty2021",
+        ImportedDataType.ESCROW,
+        PaycheckFormat.CSCO_TY2021,
+        "ESPP -",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_espp_refund_csco_ty2021",
+        ImportedDataType.REFUND,
+        PaycheckFormat.CSCO_TY2021,
+        "ESPP Res REF",
         None,
     ),
 ]
@@ -299,7 +315,7 @@ class TxtFile:
 
     def find_in_txt_data(self, field_name) -> TxtData:
         for txt_data in self.data:
-            if field_name == txt_data.field_name:
+            if field_name in txt_data.field_name:
                 return txt_data
         return None
 
