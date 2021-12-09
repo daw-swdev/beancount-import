@@ -213,6 +213,20 @@ paycheck_rule_map = [
         "ESPP Res REF",
         None,
     ),
+    PaycheckRule(
+        "paycheck_deposit_bank1_csco_ty2021",
+        ImportedDataType.DEPOSIT,
+        PaycheckFormat.CSCO_TY2021,
+        None,
+        "Bank transfer\s+XXXXX524\s+\d+\s+USD\s+(\d+,*\d+\.\d{2})",
+    ),
+    PaycheckRule(
+        "paycheck_deposit_bank2_csco_ty2021",
+        ImportedDataType.DEPOSIT,
+        PaycheckFormat.CSCO_TY2021,
+        None,
+        "Bank transfer\s+XXXXX64645\s+\d+\s+USD\s+(\d+,*\d+\.\d{2})",
+    ),
 ]
 
 
@@ -410,8 +424,12 @@ class TxtFile:
             found, match, lineno = self.find_in_contents(rule.data_regex)
             if not found:
                 return None
-            current_data = Decimal(match.group(1))
-            ytd_data = Decimal(match.group(2))
+            if rule.import_type == ImportedDataType.DEPOSIT:
+                current_data = -Decimal(match.group(1))
+                ytd_data = None
+            else:
+                current_data = Decimal(match.group(1))
+                ytd_data = Decimal(match.group(2))
         elif rule.field_name is not None:
             txt_data = self.find_in_txt_data(rule.field_name)
             if isinstance(txt_data, TxtData):
