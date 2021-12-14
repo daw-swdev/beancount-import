@@ -127,10 +127,12 @@ class ImportedDataType(IntEnum):
 
     UNKNOWN = 0
     INCOME = 1
-    EXPENSE = 2
-    DEPOSIT = 3
-    ESCROW = 4
-    REFUND = 5
+    BENEFIT = 2
+    DEDUCTION = 3
+    EXPENSE = 4
+    DEPOSIT = 5
+    ESCROW = 6
+    REFUND = 7
 
 
 @dataclass
@@ -158,6 +160,13 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_salary_pto_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "Paid Time Off",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_pli_bonus_csco_ty2021",
         ImportedDataType.INCOME,
         PaycheckFormat.CSCO_TY2021,
@@ -172,22 +181,29 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
-        "paycheck_life_ins_imp_csco_ty2021",
-        ImportedDataType.INCOME,
+        "paycheck_life_ins_imp_inc_csco_ty2021",
+        ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2021,
         "Life Ins Imp Inc",
         None,
     ),
-        PaycheckRule(
-        "paycheck_emp_401k_match_csco_ty2021",
-        ImportedDataType.INCOME,
+    PaycheckRule(
+        "paycheck_roth_401k_match_csco_ty2021",
+        ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2021,
         "401k Match - ER",
         None,
     ),
     PaycheckRule(
+        "paycheck_roth_401k_match_bonus_csco_ty2021",
+        ImportedDataType.BENEFIT,
+        PaycheckFormat.CSCO_TY2021,
+        "401k Match -ERB",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_hsa_emp_fam_seed_csco_ty2021",
-        ImportedDataType.INCOME,
+        ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2021,
         "- HSA ER FAM Seed",
         None,
@@ -226,6 +242,90 @@ paycheck_rule_map = [
         PaycheckFormat.CSCO_TY2021,
         None,
         "Bank transfer\s+XXXXX64645\s+\d+\s+USD\s+(\d+,*\d+\.\d{2})",
+    ),
+    PaycheckRule(
+        "paycheck_hsa_family_csco_ty2021",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2021,
+        "HSA - Family",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_roth_401k_csco_ty2021",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2021,
+        "Roth 401K AT RG",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_roth_401k_bonus_csco_ty2021",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2021,
+        "Roth 401K AT BC",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_fed_income_tax_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "Withholding Tax",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_social_security_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "EE Social Security Tax",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_medicare_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "EE Medicare Tax",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_medical_insurance_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "Cigna HD EE + Sp",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_dental_insurance_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "EEDental  + SP",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_vision_insurance_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "Vision - EE + SP",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_exp_life_ins_imp_inc_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "Life Ins Imp Inc",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_exp_roth_401k_match_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "401k Match - ER",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_exp_roth_401k_match_bonus_csco_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "401k Match -ERB",
+        None,
     ),
 ]
 
@@ -433,17 +533,21 @@ class TxtFile:
         elif rule.field_name is not None:
             txt_data = self.find_in_txt_data(rule.field_name)
             if isinstance(txt_data, TxtData):
-                current_data = txt_data.data[-2]
-                ytd_data = txt_data.data[-1]
+                if rule.import_type == ImportedDataType.BENEFIT:
+                    current_data = -Decimal(txt_data.data[-2])
+                    ytd_data = -Decimal(txt_data.data[-1])
+                else:
+                    current_data = Decimal(txt_data.data[-2])
+                    ytd_data = Decimal(txt_data.data[-1])
                 lineno = txt_data.lineno
                 assert(self.filename == txt_data.filename)
             else:
                 self.log_status(f"Field '{rule.field_name}' not found in {self.filename}")
-                return None
+                return None                
         else:
             self.log_status(f"WARNING: Ignoring invalid rule: '{rule}'")
             return None
-        if "Salary" in rule.account_name or "RSU" in rule.account_name:
+        if "Salary:Regular" in rule.account_name or "RSU" in rule.account_name:
             company = self.company
             employee = f"{self.first_name} {self.last_name}"
         else:
