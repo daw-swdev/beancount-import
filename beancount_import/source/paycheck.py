@@ -25,7 +25,6 @@ You might have a data directory structure like:
                 *.txt
 
 
-
 Specifying the source to beancount_import
 =========================================
 
@@ -44,6 +43,15 @@ expression like the following to specify the Cisco Paycheck source:
         ),
     ]
 
+
+Associating Accounts with Paycheck Rules
+========================================
+
+Extraction of data from the converted PDF file is accomplished via paycheck rules
+which are a mapping of an account entry with a pattern match or regular expression.
+For each paycheck rule in the PaycheckRuleMap, add a metadata field with the
+string specified with the 'meta_str' field in the paycheck rule to the associated
+account open statement in your ledger.
 
 
 Imported transaction format
@@ -181,6 +189,20 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_floating_holiday_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "Floating Holiday",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_stock_tax_trueup_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "Stock Tax True Up",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_life_ins_imp_inc_csco_ty2021",
         ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2021,
@@ -296,7 +318,7 @@ paycheck_rule_map = [
         "paycheck_dental_insurance_csco_ty2021",
         ImportedDataType.EXPENSE,
         PaycheckFormat.CSCO_TY2021,
-        "EEDental  + SP",
+        "Dental EE + SP",
         None,
     ),
     PaycheckRule(
@@ -392,7 +414,7 @@ class TxtFile:
     employee_id: str
     date: datetime.date = field(init=False)
     format: int = PaycheckFormat.UNKNOWN
-    data_regex: str = "\d+\.\d{2}-*"
+    data_regex: str = "-*\d+\.\d{2}-*"
     data: List = field(default_factory=list)
     _contents: List = field(repr=False, default_factory=list)
 
@@ -449,6 +471,14 @@ class TxtFile:
                     self.format = PaycheckFormat.CSCO_TY2020
             else:
                 raise ValueError(f"Unknown company: {self.company}")
+        elif not self.find_in_contents(self.company)[0]:
+            raise ValueError(f"Company ({self.company}) not found in paycheck: {self.filename}")
+        elif not self.find_in_contents(self.first_name)[0]:
+            raise ValueError(f"First name ({self.first_name}) not found in paycheck: {self.filename}")
+        elif not self.find_in_contents(self.last_name)[0]:
+            raise ValueError(f"Last name ({self.last_name}) not found in paycheck: {self.filename}")
+        elif not self.find_in_contents(self.employee_id)[0]:
+            raise ValueError(f"Employee ID ({self.employee_id}) not found in paycheck: {self.filename}")
 
     def verify_date(self):
         if self.format is PaycheckFormat.CSCO_TY2020:
@@ -543,7 +573,7 @@ class TxtFile:
                 assert(self.filename == txt_data.filename)
             else:
                 self.log_status(f"Field '{rule.field_name}' not found in {self.filename}")
-                return None                
+                return None
         else:
             self.log_status(f"WARNING: Ignoring invalid rule: '{rule}'")
             return None
@@ -657,7 +687,6 @@ class PrepareState:
                     continue
                 if not PAYCHECK_KEY_FILE in posting.meta:
                     continue
-                debugpy.breakpoint()
                 import_type = self.find_account_import_type(posting.account)
                 if (
                     import_type == ImportedDataType.EXPENSE
@@ -689,13 +718,26 @@ class PrepareState:
                         postings=[],
                     )
                 entry.postings.append(imported_data.posting())
-            self.results.add_pending_entry(
-                ImportResult(
-                    date=imported_data.date,
-                    entries=[entry],
-                    info=get_info(imported_data),
+            # Verify entry completeness
+            entry_sum = Amount(Decimal('0'), 'USD')
+            self.source.log_status(f"Verifying Transaction: {entry.date} {entry.narration}")
+            for posting in entry.postings:
+                entry_sum = amount.add(entry_sum, posting.units)
+                self.source.log_status(pformat(posting, indent=2))
+                self.source.log_status(f"entry_sum = {entry_sum}")
+            if entry_sum:
+                err_msg = "ERROR: Invalid Transaction posting total: " \
+                    + f"{entry_sum} from {entry.date} {entry.narration}"
+                self.source.log_status(err_msg)
+                print(err_msg)
+            else:
+                self.results.add_pending_entry(
+                    ImportResult(
+                        date=imported_data.date,
+                        entries=[entry],
+                        info=get_info(imported_data),
+                    )
                 )
-            )
 
 
 class PaycheckSource(Source):
