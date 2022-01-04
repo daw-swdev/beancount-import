@@ -127,6 +127,7 @@ class PaycheckFormat(IntEnum):
     UNKNOWN = 0
     CSCO_TY2020 = 1  # Cisco Systems TY2020 Text Format
     CSCO_TY2021 = 2  # Cisco Systems TY2021 Text Format
+    PARKERS_TY2021 = 3  # Parker and Sons TY2021 Text Format (by paychex)
 
 
 @unique
@@ -349,6 +350,41 @@ paycheck_rule_map = [
         "401k Match -ERB",
         None,
     ),
+    PaycheckRule(
+        "paycheck_gross_earnings_parkers_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.PARKERS_TY2021,
+        "Gross Earnings",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_social_security_parkers_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.PARKERS_TY2021,
+        "Social Security",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_medicare_parkers_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.PARKERS_TY2021,
+        "Medicare",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_deposit_bank1_parkers_ty2021",
+        ImportedDataType.DEPOSIT,
+        PaycheckFormat.PARKERS_TY2021,
+        "Chkg 630",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_fed_income_tax_parkers_ty2021",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.PARKERS_TY2021,
+        "Fed Income Tax",
+        None,
+    ),
 ]
 
 
@@ -469,20 +505,32 @@ class TxtFile:
                     self.format = PaycheckFormat.CSCO_TY2021
                 else:
                     self.format = PaycheckFormat.CSCO_TY2020
+            elif re.search("Parker And Sons", self.company):
+                self.format = PaycheckFormat.PARKERS_TY2021
             else:
                 raise ValueError(f"Unknown company: {self.company}")
         elif not self.find_in_contents(self.company)[0]:
-            raise ValueError(f"Company ({self.company}) not found in paycheck: {self.filename}")
+            raise ValueError(
+                f"Company ({self.company}) not found in paycheck: {self.filename}"
+            )
         elif not self.find_in_contents(self.first_name)[0]:
-            raise ValueError(f"First name ({self.first_name}) not found in paycheck: {self.filename}")
+            raise ValueError(
+                f"First name ({self.first_name}) not found in paycheck: {self.filename}"
+            )
         elif not self.find_in_contents(self.last_name)[0]:
-            raise ValueError(f"Last name ({self.last_name}) not found in paycheck: {self.filename}")
+            raise ValueError(
+                f"Last name ({self.last_name}) not found in paycheck: {self.filename}"
+            )
         elif not self.find_in_contents(self.employee_id)[0]:
-            raise ValueError(f"Employee ID ({self.employee_id}) not found in paycheck: {self.filename}")
+            raise ValueError(
+                f"Employee ID ({self.employee_id}) not found in paycheck: {self.filename}"
+            )
 
     def verify_date(self):
         if self.format is PaycheckFormat.CSCO_TY2020:
             date_regex = "\s+(\d{2}/\d{2}/\d{4})"
+        elif self.format is PaycheckFormat.PARKERS_TY2021:
+            date_regex = "Check Date:\s+(\d{2}/\d{2}/\d{2})"
         else:
             date_regex = "Check Date:\s+(\d{2}/\d{2}/\d{4})"
 
@@ -491,7 +539,10 @@ class TxtFile:
             try:
                 check_date = datetime.datetime.strptime(match.group(1), "%m/%d/%Y")
             except ValueError:
-                raise ValueError(f"Date not found in filename: ({self.filename})")
+                try:
+                    check_date = datetime.datetime.strptime(match.group(1), "%m/%d/%y")
+                except ValueError:
+                    raise ValueError(f"Date not found in filename: ({self.filename})")
             if self.date != check_date:
                 raise ValueError(f"Invalid date in filename: ({self.date.date()})!")
         else:
@@ -515,13 +566,14 @@ class TxtFile:
                     # Look for 'data'
                     found_data = re.search(self.data_regex, token)
                     if found_data is not None:
-                        if not gather_data:
+                        if not gather_data and field_name is not None:
                             gather_data = True
                             column = TxtData(
                                 field_name.getvalue(), [], self.filename, lineno
                             )
                             field_name = None
-                        column.data.append(Decimal(token))
+                        if column is not None:
+                            column.data.append(Decimal(token))
                     # Stop gathering data,
                     #   - add column to list,
                     #   - start gathering field_name string
@@ -570,14 +622,25 @@ class TxtFile:
                     current_data = Decimal(txt_data.data[-2])
                     ytd_data = Decimal(txt_data.data[-1])
                 lineno = txt_data.lineno
-                assert(self.filename == txt_data.filename)
+                assert self.filename == txt_data.filename
             else:
-                self.log_status(f"Field '{rule.field_name}' not found in {self.filename}")
+                self.log_status(
+                    f"Field '{rule.field_name}' not found in {self.filename}"
+                )
                 return None
         else:
             self.log_status(f"WARNING: Ignoring invalid rule: '{rule}'")
             return None
-        if "Salary:Regular" in rule.account_name or "RSU" in rule.account_name:
+        if current_data > 0 and (
+            rule.import_type == ImportedDataType.EXPENSE
+            or rule.import_type == ImportedDataType.DEPOSIT
+        ):
+            current_data = -current_data
+        if (
+            "Salary:Regular" in rule.account_name
+            or "RSU" in rule.account_name
+            or "Gross-Earnings" in rule.account_name
+        ):
             company = self.company
             employee = f"{self.first_name} {self.last_name}"
         else:
@@ -624,6 +687,8 @@ def valid_filename(filename):
 def paycheck_narration(fmt: PaycheckFormat):
     if fmt == PaycheckFormat.CSCO_TY2020 or fmt == PaycheckFormat.CSCO_TY2021:
         return "Paycheck - Cisco Systems, Inc."
+    if fmt == PaycheckFormat.PARKERS_TY2021:
+        return "Paycheck - Parker and Sons Coffee Roasting LLC"
     return "Paycheck - Unknown company"
 
 
@@ -719,15 +784,20 @@ class PrepareState:
                     )
                 entry.postings.append(imported_data.posting())
             # Verify entry completeness
-            entry_sum = Amount(Decimal('0'), 'USD')
-            self.source.log_status(f"Verifying Transaction: {entry.date} {entry.narration}")
+            entry_sum = Amount(Decimal("0"), "USD")
+            self.source.log_status(
+                f"Verifying Transaction: {entry.date} {entry.narration}"
+            )
+            debugpy.breakpoint()
             for posting in entry.postings:
                 entry_sum = amount.add(entry_sum, posting.units)
                 self.source.log_status(pformat(posting, indent=2))
                 self.source.log_status(f"entry_sum = {entry_sum}")
             if entry_sum:
-                err_msg = "ERROR: Invalid Transaction posting total: " \
+                err_msg = (
+                    "ERROR: Invalid Transaction posting total: "
                     + f"{entry_sum} from {entry.date} {entry.narration}"
+                )
                 self.source.log_status(err_msg)
                 print(err_msg)
             else:
