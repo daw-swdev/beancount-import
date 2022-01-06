@@ -122,7 +122,11 @@ PAYCHECK_KEY_EMPLOYEE = "paycheck_employee"
 
 @unique
 class PaycheckFormat(IntEnum):
-    """Paycheck Format Enumeration."""
+    """Paycheck Format Enumeration.
+
+    When adding a new paycheck format, the TxtFile.verify_format() method needs
+    to be updated with the new format.
+    """
 
     UNKNOWN = 0
     CSCO_TY2020 = 1  # Cisco Systems TY2020 Text Format
@@ -135,11 +139,12 @@ class ImportedDataType(IntEnum):
     """Data Import Type Enumeration."""
 
     UNKNOWN = 0
-    INCOME = 1
-    BENEFIT = 2
-    DEDUCTION = 3
-    EXPENSE = 4
-    DEPOSIT = 5
+    DEPOSIT = 1
+    # Paycheck authoritative for all accounts with imports > DEPOSIT
+    INCOME = 2
+    BENEFIT = 3
+    DEDUCTION = 4
+    EXPENSE = 5
     ESCROW = 6
     REFUND = 7
 
@@ -211,6 +216,13 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_imputed_income_csco_ty2021_12",
+        ImportedDataType.BENEFIT,
+        PaycheckFormat.CSCO_TY2021,
+        "Imputed Income",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_roth_401k_match_csco_ty2021",
         ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2021,
@@ -228,7 +240,14 @@ paycheck_rule_map = [
         "paycheck_hsa_emp_fam_seed_csco_ty2021",
         ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2021,
-        "- HSA ER FAM Seed",
+        "HSA ER FAM Seed",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_hsa_employer_csco_ty2021_12",
+        ImportedDataType.BENEFIT,
+        PaycheckFormat.CSCO_TY2021,
+        "HSA Employer - F",
         None,
     ),
     PaycheckRule(
@@ -270,7 +289,7 @@ paycheck_rule_map = [
         "paycheck_hsa_family_csco_ty2021",
         ImportedDataType.DEDUCTION,
         PaycheckFormat.CSCO_TY2021,
-        "HSA - Family",
+        "Family",
         None,
     ),
     PaycheckRule(
@@ -326,7 +345,7 @@ paycheck_rule_map = [
         "paycheck_vision_insurance_csco_ty2021",
         ImportedDataType.EXPENSE,
         PaycheckFormat.CSCO_TY2021,
-        "Vision - EE + SP",
+        "Vision",
         None,
     ),
     PaycheckRule(
@@ -334,6 +353,13 @@ paycheck_rule_map = [
         ImportedDataType.EXPENSE,
         PaycheckFormat.CSCO_TY2021,
         "Life Ins Imp Inc",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_offset_imputed_income_csco_ty2021_12",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "Imputed Income",
         None,
     ),
     PaycheckRule(
@@ -457,7 +483,7 @@ class TxtFile:
     def __post_init__(self):
         self.date = datetime.datetime.strptime(
             os.path.basename(self.filename)[:10], "%Y-%m-%d"
-        )
+        ).date()
         self.get_contents()
         self.verify_format()
         self.verify_date()
@@ -498,6 +524,7 @@ class TxtFile:
             and self.find_in_contents(self.last_name)[0]
             and self.find_in_contents(self.employee_id)[0]
         ):
+            # NOTE: Add new paycheck format to this if-elif-else statement
             if re.search("Cisco", self.company):
                 if re.search(
                     "E A R N I N G S      S T A T E M E N T", self._contents[0]
@@ -537,10 +564,14 @@ class TxtFile:
         found, match, line = self.find_in_contents(date_regex)
         if found:
             try:
-                check_date = datetime.datetime.strptime(match.group(1), "%m/%d/%Y")
+                check_date = datetime.datetime.strptime(
+                    match.group(1), "%m/%d/%Y"
+                ).date()
             except ValueError:
                 try:
-                    check_date = datetime.datetime.strptime(match.group(1), "%m/%d/%y")
+                    check_date = datetime.datetime.strptime(
+                        match.group(1), "%m/%d/%y"
+                    ).date()
                 except ValueError:
                     raise ValueError(f"Date not found in filename: ({self.filename})")
             if self.date != check_date:
@@ -615,12 +646,8 @@ class TxtFile:
         elif rule.field_name is not None:
             txt_data = self.find_in_txt_data(rule.field_name)
             if isinstance(txt_data, TxtData):
-                if rule.import_type == ImportedDataType.BENEFIT:
-                    current_data = -Decimal(txt_data.data[-2])
-                    ytd_data = -Decimal(txt_data.data[-1])
-                else:
-                    current_data = Decimal(txt_data.data[-2])
-                    ytd_data = Decimal(txt_data.data[-1])
+                current_data = Decimal(txt_data.data[-2])
+                ytd_data = Decimal(txt_data.data[-1])
                 lineno = txt_data.lineno
                 assert self.filename == txt_data.filename
             else:
@@ -709,7 +736,7 @@ class PrepareState:
         self.results = results
         self.rules = []  # type: List[ImportAccountRule]
         self.entry_map = OrderedDict()  # type: OrderedDict[str, List[ImportedData]]
-        self.matching_transactions = []
+        self.matching_paychecks = []
 
         # Find paycheck account rules from paycheck metadata in account
         # Open.meta and mark as 'authoritative' and/or 'skip training account'
@@ -753,13 +780,17 @@ class PrepareState:
                 if not PAYCHECK_KEY_FILE in posting.meta:
                     continue
                 import_type = self.find_account_import_type(posting.account)
-                if (
-                    import_type == ImportedDataType.EXPENSE
-                    or import_type == ImportedDataType.INCOME
-                ):
+                if import_type > ImportedDataType.DEPOSIT:
+                    # Mark account as 'authoritative' for paycheck importer
                     results.add_account(posting.account)
-                if PAYCHECK_KEY_COMPANY in posting.meta:
-                    self.matching_transactions.append([entry, posting])
+                if (
+                    PAYCHECK_KEY_COMPANY in posting.meta
+                    and not posting.meta.get(PAYCHECK_KEY_FILE)
+                    in self.matching_paychecks
+                ):
+                    self.matching_paychecks.append(
+                        posting.meta.get(PAYCHECK_KEY_FILE)
+                    )
 
     def find_account_import_type(self, account_name):
         for rule in self.rules:
@@ -769,6 +800,8 @@ class PrepareState:
 
     def get_entries(self):
         for file, import_map in sorted(self.entry_map.items()):
+            if file in self.matching_paychecks:
+                continue
             entry = None
             for imported_data in import_map:
                 if entry is None:
@@ -788,7 +821,6 @@ class PrepareState:
             self.source.log_status(
                 f"Verifying Transaction: {entry.date} {entry.narration}"
             )
-            debugpy.breakpoint()
             for posting in entry.postings:
                 entry_sum = amount.add(entry_sum, posting.units)
                 self.source.log_status(pformat(posting, indent=2))
@@ -796,7 +828,7 @@ class PrepareState:
             if entry_sum:
                 err_msg = (
                     "ERROR: Invalid Transaction posting total: "
-                    + f"{entry_sum} from {entry.date} {entry.narration}"
+                    + f"{entry_sum} from {os.path.basename(file)}"
                 )
                 self.source.log_status(err_msg)
                 print(err_msg)
