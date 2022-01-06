@@ -439,8 +439,6 @@ from ..journal_editor import JournalEditor
 from ..matching import FIXME_ACCOUNT, CHECK_KEY
 from ..training import ExampleKeyValuePairs
 
-# DAW-DEBUG: import pdb
-
 
 # find_child function was derived from implementation in beancount/ingest/importers/ofx.pytest
 # Copyright (C) 2016  Martin Blais
@@ -617,7 +615,6 @@ TOLERANCE = 0.05
 
 class ParsedOfxStatement(object):
     def __init__(self, seen_fitids, filename, securities_map, org, stmtrs):
-        # DAW-DEBUG pdb.set_trace()
         filename = os.path.abspath(filename)
         self.filename = filename
         self.securities_map = securities_map
@@ -727,7 +724,6 @@ class ParsedOfxStatement(object):
                         filename=filename))
 
     def get_entries(self, prepare_state):
-        # DAW-DEBUG: pdb.set_trace()
         account = prepare_state.ofx_id_to_account.get(self.ofx_id)
         results = prepare_state.results
         if account is None:
@@ -1199,7 +1195,6 @@ class ParsedOfxFile(object):
         # Get the description of securities used in this file.
         securities_map = {s.uniqueid: s for s in get_securities(soup)}
 
-        # DAW-DEBUG: pdb.set_trace()
         org = find_child(soup, 'org') or ''
 
         # For each statement.
@@ -1214,7 +1209,6 @@ class ParsedOfxFile(object):
 
 
 def get_account_map(accounts):
-    # DAW-DEBUG: pdb.set_trace()
     account_to_ofx_id = dict()
     ofx_id_to_account = dict()
     cash_accounts = set()
