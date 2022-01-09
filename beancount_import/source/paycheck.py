@@ -167,6 +167,174 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_salary_pto_csco_ty2020",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2020,
+        "Paid Time Off",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_pli_bonus_csco_ty2020",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2020,
+        "PLI ",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_floating_holiday_csco_ty2020",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2020,
+        "Floating Holiday",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_misc_deduction_csco_ty2020",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2020,
+        "Misc. Deduction",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_life_ins_imp_inc_csco_ty2020",
+        ImportedDataType.BENEFIT,
+        PaycheckFormat.CSCO_TY2020,
+        "Life Insurance Imputed Income",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_roth_401k_match_csco_ty2020",
+        ImportedDataType.BENEFIT,
+        PaycheckFormat.CSCO_TY2020,
+        "Employer 401-k Match",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_roth_401k_match_bonus_csco_ty2020",
+        ImportedDataType.BENEFIT,
+        PaycheckFormat.CSCO_TY2020,
+        "Emp 401-k Match Bonus",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_espp_escrow_csco_ty2020",
+        ImportedDataType.ESCROW,
+        PaycheckFormat.CSCO_TY2020,
+        "ESPP Period",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_espp_refund_csco_ty2020",
+        ImportedDataType.REFUND,
+        PaycheckFormat.CSCO_TY2020,
+        "Stock Plan -1 Refund",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_deposit_bank1_csco_ty2020",
+        ImportedDataType.DEPOSIT,
+        PaycheckFormat.CSCO_TY2020,
+        None,
+        "Checking - XXXX0524\s+(\d+,*\d+\.\d{2})",
+    ),
+    PaycheckRule(
+        "paycheck_deposit_bank2_csco_ty2020",
+        ImportedDataType.DEPOSIT,
+        PaycheckFormat.CSCO_TY2020,
+        None,
+        "Checking - XXXXXX4645\s+(\d+,*\d+\.\d{2})",
+    ),
+    PaycheckRule(
+        "paycheck_hsa_family_csco_ty2020",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2020,
+        "Health Savings Acct Family",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_401k_csco_ty2020",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2020,
+        "401-k PreTax Reg",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_roth_401k_csco_ty2020",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2020,
+        "Roth 401K After-Tax Reg",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_roth_401k_bonus_csco_ty2020",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2020,
+        "Roth 401K After-Tax Bonus/Co",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_fed_income_tax_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Federal Income Tax",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_social_security_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Social Security",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_medicare_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Federal Medicare",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_medical_insurance_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Medical",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_dental_insurance_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Dental MetLife",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_vision_insurance_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Vision",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_offset_life_ins_imp_inc_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Life Ins Imputed Income Offset",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_offset_roth_401k_match_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Employer 401-k Match",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_offset_roth_401k_match_bonus_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Emp 401-k Match Bonus",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_salary_csco_ty2021",
         ImportedDataType.INCOME,
         PaycheckFormat.CSCO_TY2021,
@@ -650,6 +818,15 @@ class TxtFile:
                 ytd_data = Decimal(txt_data.data[-1])
                 lineno = txt_data.lineno
                 assert self.filename == txt_data.filename
+                if (
+                    current_data > 0
+                    and (
+                        rule.import_type == ImportedDataType.ESCROW
+                        or rule.import_type == ImportedDataType.DEDUCTION
+                    )
+                ) or (current_data < 0 and rule.import_type == ImportedDataType.INCOME):
+                    current_data = -current_data
+                    ytd_data = -ytd_data
             else:
                 self.log_status(
                     f"Field '{rule.field_name}' not found in {self.filename}"
@@ -788,9 +965,7 @@ class PrepareState:
                     and not posting.meta.get(PAYCHECK_KEY_FILE)
                     in self.matching_paychecks
                 ):
-                    self.matching_paychecks.append(
-                        posting.meta.get(PAYCHECK_KEY_FILE)
-                    )
+                    self.matching_paychecks.append(posting.meta.get(PAYCHECK_KEY_FILE))
 
     def find_account_import_type(self, account_name):
         for rule in self.rules:
