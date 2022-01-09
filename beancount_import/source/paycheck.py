@@ -443,7 +443,7 @@ class ImportedData:
 
     def posting(self):
         meta = dict()
-        meta[PAYCHECK_KEY_FILE] = self.filename
+        meta[PAYCHECK_KEY_FILE] = os.path.basename(self.filename)
         if self.company is not None:
             meta[PAYCHECK_KEY_COMPANY] = self.company
         if self.employee is not None:
