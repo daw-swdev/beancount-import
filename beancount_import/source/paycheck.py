@@ -202,6 +202,13 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_401k_match_csco_ty2020",
+        ImportedDataType.BENEFIT,
+        PaycheckFormat.CSCO_TY2020,
+        "Employer 401-k Match",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_roth_401k_match_csco_ty2020",
         ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2020,
@@ -213,6 +220,13 @@ paycheck_rule_map = [
         ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2020,
         "Emp 401-k Match Bonus",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_offset_401k_match_csco_ty2020",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2020,
+        "Employer 401-k Match",
         None,
     ),
     PaycheckRule(
@@ -812,6 +826,11 @@ class TxtFile:
                 current_data = Decimal(match.group(1))
                 ytd_data = Decimal(match.group(2))
         elif rule.field_name is not None:
+            if rule.field_name == "Employer 401-k Match":
+                roth_account = self.find_in_contents("Roth")[0]
+                if ((roth_account == False and "Roth" in rule.account_name) or
+                    (roth_account == True and "Roth" not in rule.account_name)):
+                    return None
             txt_data = self.find_in_txt_data(rule.field_name)
             if isinstance(txt_data, TxtData):
                 current_data = Decimal(txt_data.data[-2])
