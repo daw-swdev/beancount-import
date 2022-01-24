@@ -806,7 +806,7 @@ class TxtFile:
             if not found:
                 return None
             if rule.import_type == ImportedDataType.DEPOSIT:
-                current_data = -Decimal(match.group(1))
+                current_data = Decimal(match.group(1))
                 ytd_data = None
             else:
                 current_data = Decimal(match.group(1))
@@ -819,12 +819,19 @@ class TxtFile:
                 lineno = txt_data.lineno
                 assert self.filename == txt_data.filename
                 if (
-                    current_data > 0
+                    current_data < 0
                     and (
                         rule.import_type == ImportedDataType.ESCROW
                         or rule.import_type == ImportedDataType.DEDUCTION
                     )
-                ) or (current_data < 0 and rule.import_type == ImportedDataType.INCOME):
+                ) or (
+                    current_data > 0
+                    and (
+                        rule.import_type == ImportedDataType.INCOME
+                        or rule.import_type == ImportedDataType.BENEFIT
+                        or rule.import_type == ImportedDataType.REFUND
+                    )
+                ):
                     current_data = -current_data
                     ytd_data = -ytd_data
             else:
@@ -835,7 +842,7 @@ class TxtFile:
         else:
             self.log_status(f"WARNING: Ignoring invalid rule: '{rule}'")
             return None
-        if current_data > 0 and (
+        if current_data < 0 and (
             rule.import_type == ImportedDataType.EXPENSE
             or rule.import_type == ImportedDataType.DEPOSIT
         ):
