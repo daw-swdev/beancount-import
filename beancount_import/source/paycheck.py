@@ -1029,7 +1029,7 @@ class PrepareState:
 
     def get_entries(self):
         for file, import_map in sorted(self.entry_map.items()):
-            if file in self.matching_paychecks:
+            if os.path.basename(file) in self.matching_paychecks:
                 continue
             entry = None
             for imported_data in import_map:
