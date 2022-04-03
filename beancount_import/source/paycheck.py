@@ -447,14 +447,14 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
-        "paycheck_hsa_employer_fam_seed_inc_csco_ty2021_12",
+        "paycheck_hsa_emp_fam_seed_inc_csco_ty2021_2022",
         ImportedDataType.BENEFIT,
         PaycheckFormat.CSCO_TY2021,
         "HSA Employer - F",
         None,
     ),
     PaycheckRule(
-        "paycheck_hsa_employer_fam_seed_csco_ty2021_12",
+        "paycheck_hsa_emp_fam_seed_csco_ty2021_2022",
         ImportedDataType.DEPOSIT,
         PaycheckFormat.CSCO_TY2021,
         "HSA Employer - F",
@@ -545,10 +545,24 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_medical_insurance_csco_ty2021_2022",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "Medical Plan",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_dental_insurance_csco_ty2021",
         ImportedDataType.EXPENSE,
         PaycheckFormat.CSCO_TY2021,
         "Dental EE + SP",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_dental_insurance_csco_ty2021_2022",
+        ImportedDataType.EXPENSE,
+        PaycheckFormat.CSCO_TY2021,
+        "Dental Plan",
         None,
     ),
     PaycheckRule(
