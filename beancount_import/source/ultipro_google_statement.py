@@ -36,8 +36,9 @@ def parse(text: str) -> ParseResult:
     account_re = r'[0-9x]+'
 
     # One or more space separated words.  Each word starts with
-    # alphanumeric, remaining characters are alphanumeric + hyphen.
-    field_name_re = r'[0-9a-zA-Z][0-9a-zA-Z\-]*(?:[ \n]+[0-9a-zA-Z][0-9a-zA-Z\-]*)*'
+    # alphanumeric and remaining characters are alphanumeric + hyphen. A
+    # single hyphen is also allowed as a word after the first word.
+    field_name_re = r'[0-9a-zA-Z][0-9a-zA-Z\-]*(?:[ \n]+(?:[0-9a-zA-Z][0-9a-zA-Z\-]*|-)(?:\.)?)*'
 
     def parse_date(x: str) -> datetime.date:
         return datetime.datetime.strptime(x, '%m/%d/%Y').date()
@@ -87,7 +88,7 @@ def parse(text: str) -> ParseResult:
         ]),
         [
             (
-                r'^(Earnings)\nPay Type Hours Pay Rate Current YTD$',
+                r'^(Earnings)\nPay[ \n]Type Hours[ \n]Pay[ \n]Rate Current YTD$',
                 [
                     (r'^(' + field_name_re + r')[ \n](?:(' + decimal_re +
                      r') (' + currency_amount_re + r') )?(' +
@@ -100,7 +101,7 @@ def parse(text: str) -> ParseResult:
                     #(r'^(Total Hours) (' + decimal_re + r')$', ('hours', D)),
                 ]),
             (
-                r'^(Earnings)\nPay Type Week Job Hours[ \n]Pay[ \n]Rate Current YTD$',
+                r'^(Earnings)\nPay[ \n]Type Week Job Hours[ \n]Pay[ \n]Rate Current YTD$',
                 [
                     (r'^(' + field_name_re + r')[ \n](?:[0-5] [a-zA-Z ]+)?(' +
                      decimal_re + r')' + 3 *
@@ -118,7 +119,7 @@ def parse(text: str) -> ParseResult:
                      ('Current', parse_currency)),
                 ]),
             (
-                r'^(Earnings)\nPay Type Hours\nPay\nRate\nPiece\nUnits\nPiece\nRate Current YTD$',
+                r'^(Earnings)\nPay[ \n]Type Hours[ \n]Pay[ \n]Rate\nPiece\nUnits\nPiece\nRate Current YTD$',
                 [
                     (r'^(' + field_name_re + r')[ \n](' + decimal_re + r')' +
                      (r' (' + currency_amount_re + r')') + r' (' + decimal_re +
@@ -150,6 +151,20 @@ def parse(text: str) -> ParseResult:
              ]),
             (r'^(Deductions)\nEmployee Employer\nDeduction\sBased\sOn\sPre-\s?Tax Current YTD Current YTD$',
              [
+                 (r'^(' + field_name_re + r')' +
+                  (r'\s(' + currency_amount_re + r')') +
+                  (r' (' + yesno_re + r')') + 4 *
+                  (r' (' + currency_amount_re + r')') + r'$',
+                  ('Based On', parse_currency),
+                  ('Pre-tax', parse_yesno),
+                  ('Current', parse_currency),
+                  ('YTD', parse_currency),
+                  ('Current:Employer', parse_currency),
+                  ('YTD:Employer', parse_currency)),
+             ]),
+            (r'^(Deductions)\nDeduction\sBased\sOn\sPre-\s?Tax\sEmployee\sCurrent\sEmployee\sYTD\sEmployer\sCurrent\sEmployer\sYTD$',
+             [
+                 # These patterns are the same as in the preceding section.
                  (r'^(' + field_name_re + r')' +
                   (r'\s(' + currency_amount_re + r')') +
                   (r' (' + yesno_re + r')') + 4 *
@@ -218,7 +233,7 @@ def parse(text: str) -> ParseResult:
             found_match = True
             break
         if not found_match:
-            raise ValueError('Failed to match section %r' % entry)
+            raise ValueError('Failed to match section\n\n%r\n\nin text\n\n%r' % (entry, text[start_i:]))
 
     all_values = collections.OrderedDict() # type: Dict[str, ParsedValues]
 

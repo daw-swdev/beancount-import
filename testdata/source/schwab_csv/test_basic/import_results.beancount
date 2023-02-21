@@ -845,6 +845,38 @@
     schwab_action: "Stock Merger"
     source_desc: "SPAC MERGER CORP XXXMANDATORY MERGER EFF: 03/25/21"
 
+;; date: 2021-05-25
+;; info: {"filename": "<testdata>/test_basic/transactions/Intelligent_Transactions_20201115-180120.CSV", "line": 25, "type": "text/csv"}
+
+; features: []
+2021-05-25 * "INCOME - DIV - ISHARES GOLD ETF"
+  Assets:Schwab:Intelligent-4321:Cash   18.02 USD
+    date: 2021-05-25
+    schwab_action: "Cash In Lieu"
+    source_desc: "ISHARES GOLD ETF"
+  Income:Dividend:Schwab:IAU           -18.02 USD
+
+;; date: 2021-05-26
+;; info: {"filename": "<testdata>/test_basic/transactions/Intelligent_Transactions_20201115-180120.CSV", "line": 26, "type": "text/csv"}
+
+; features: [
+;             {
+;               "amount": "2000.00 USD",
+;               "date": "2021-05-26",
+;               "key_value_pairs": {
+;                 "desc": "Tfr SOME BANK",
+;                 "schwab_action": "MoneyLink Deposit"
+;               },
+;               "source_account": "Assets:Schwab:Intelligent-4321:Cash"
+;             }
+;           ]
+2021-05-26 * "TRANSFER - Tfr SOME BANK"
+  Assets:Schwab:Intelligent-4321:Cash   2000.00 USD
+    date: 2021-05-26
+    schwab_action: "MoneyLink Deposit"
+    source_desc: "Tfr SOME BANK"
+  Expenses:FIXME                       -2000.00 USD
+
 ;; date: 2021-07-30
 ;; info: {"filename": "<testdata>/test_basic/transactions/EAC_Checking_Transactions_20201223-160009.CSV", "line": 5, "type": "text/csv"}
 
@@ -855,3 +887,57 @@
     schwab_action: "ATMREBATE"
     source_desc: "ATM Fee Rebate"
   Expenses:Bank-Fees:Schwab  -3.00 USD
+
+;; date: 2021-11-01
+;; info: {"filename": "<testdata>/test_basic/transactions/EAC_Checking_Transactions_20201223-160009.CSV", "line": 16, "type": "text/csv"}
+
+; features: [
+;             {
+;               "amount": "1234.56 USD",
+;               "date": "2021-11-01",
+;               "key_value_pairs": {
+;                 "desc": "Deposit Mobile Banking",
+;                 "schwab_action": "DEPOSIT"
+;               },
+;               "source_account": "Assets:Schwab:Checking"
+;             }
+;           ]
+2021-11-01 * "DEPOSIT - Deposit Mobile Banking"
+  Assets:Schwab:Checking   1234.56 USD
+    date: 2021-11-01
+    schwab_action: "DEPOSIT"
+    source_desc: "Deposit Mobile Banking"
+  Expenses:FIXME          -1234.56 USD
+
+;; date: 2022-04-20
+;; info: {"filename": "<testdata>/test_basic/transactions/Brokerage_Transactions_20201115-180021.CSV", "line": 20, "type": "text/csv"}
+
+; features: []
+2022-04-20 * "INCOME - DIV - ISHARES GLOBAL CLEAN ENERGY ETF"
+  Assets:Schwab:Brokerage-1234:Cash   2.11 USD
+    date: 2022-04-20
+    schwab_action: "Pr Yr Div Reinvest"
+    source_desc: "ISHARES GLOBAL CLEAN ENERGY ETF"
+  Income:Dividend:Schwab:ICLN        -2.11 USD
+
+;; date: 2022-04-21
+;; info: {"filename": "<testdata>/test_basic/transactions/Brokerage_Transactions_20201115-180021.CSV", "line": 21, "type": "text/csv"}
+
+; features: []
+2022-04-21 * "INCOME - DIV - ISHARES GLOBAL CLEAN ENERGY ETF"
+  Assets:Schwab:Brokerage-1234:Cash   2.11 USD
+    date: 2022-04-21
+    schwab_action: "Long Term Cap Gain Reinvest"
+    source_desc: "ISHARES GLOBAL CLEAN ENERGY ETF"
+  Income:Dividend:Schwab:ICLN        -2.11 USD
+
+;; date: 2022-04-22
+;; info: {"filename": "<testdata>/test_basic/transactions/Brokerage_Transactions_20201115-180021.CSV", "line": 22, "type": "text/csv"}
+
+; features: []
+2022-04-22 * "INCOME - DIV - ISHARES GLOBAL CLEAN ENERGY ETF"
+  Assets:Schwab:Brokerage-1234:Cash   2.11 USD
+    date: 2022-04-22
+    schwab_action: "Short Term Cap Gain Reinvest"
+    source_desc: "ISHARES GLOBAL CLEAN ENERGY ETF"
+  Income:Dividend:Schwab:ICLN        -2.11 USD
