@@ -503,6 +503,13 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_hsa_csco_ty2022",
+        ImportedDataType.DEDUCTION,
+        PaycheckFormat.CSCO_TY2021,
+        "Health Saving Acct",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_roth_401k_csco_ty2021",
         ImportedDataType.DEDUCTION,
         PaycheckFormat.CSCO_TY2021,
@@ -598,6 +605,13 @@ paycheck_rule_map = [
         ImportedDataType.EXPENSE,
         PaycheckFormat.CSCO_TY2021,
         "401k Match -ERB",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_salary_oncall_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "OnCall",
         None,
     ),
     PaycheckRule(
