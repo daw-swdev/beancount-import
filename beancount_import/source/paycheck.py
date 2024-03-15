@@ -377,6 +377,13 @@ paycheck_rule_map = [
         None,
     ),
     PaycheckRule(
+        "paycheck_salary_time2give_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "Time 2 Give",
+        None,
+    ),
+    PaycheckRule(
         "paycheck_pli_bonus_csco_ty2021",
         ImportedDataType.INCOME,
         PaycheckFormat.CSCO_TY2021,
@@ -395,6 +402,13 @@ paycheck_rule_map = [
         ImportedDataType.INCOME,
         PaycheckFormat.CSCO_TY2021,
         "Floating Holiday",
+        None,
+    ),
+    PaycheckRule(
+        "paycheck_service_anniversary_csco_ty2021",
+        ImportedDataType.INCOME,
+        PaycheckFormat.CSCO_TY2021,
+        "SA Cash",
         None,
     ),
     PaycheckRule(
@@ -1078,17 +1092,33 @@ class PrepareState:
             self.source.log_status(
                 f"Verifying Transaction: {entry.date} {entry.narration}"
             )
+            # TODO: Refactor RSU grant entry generation to be generic
+            rsu_posting = None
             for posting in entry.postings:
                 entry_sum = amount.add(entry_sum, posting.units)
                 self.source.log_status(pformat(posting, indent=2))
                 self.source.log_status(f"entry_sum = {entry_sum}")
-            if entry_sum:
-                err_msg = (
-                    "ERROR: Invalid Transaction posting total: "
-                    + f"{entry_sum} from {os.path.basename(file)}"
+                if 'rsu' in posting.account.lower():
+                    rsu_posting = posting
+            if rsu_posting:
+                entry.postings.append(
+                    Posting(account="Assets:Investment:CharlesSchwab:CSCO-Equity",
+                            units=Amount(-entry_sum.number, entry_sum.currency),
+                            cost=None,
+                            price=None,
+                            flag=None,
+                            meta=None,
+                    )
                 )
-                self.source.log_status(err_msg)
-                print(err_msg)
+                entry_sum = Amount(Decimal("0"), "USD")
+
+            if entry_sum:
+                    err_msg = (
+                        "ERROR: Invalid Transaction posting total: "
+                        + f"{entry_sum} from {os.path.basename(file)}"
+                    )
+                    self.source.log_status(err_msg)
+                    print(err_msg)
             else:
                 self.results.add_pending_entry(
                     ImportResult(
