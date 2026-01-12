@@ -22,6 +22,7 @@ examples = [
     ('test_vanguard_401k_matching', 'vanguard401k.ofx'),
     ('test_vanguard_xfer_in', 'vanguard_xfer_in.ofx'),
     ('test_fidelity_savings', 'fidelity-savings.ofx'),
+    ('test_fidelity_treasury', 'fidelity_treasury.ofx'),
     ('test_suncorp', 'suncorp.ofx'),
     ('test_checking', 'checking.ofx'),
     ('test_checking_emptyledgerbal', 'checking-emptyledgerbal.ofx'),
@@ -37,6 +38,7 @@ examples = [
     ('test_checking2_matching', 'checking2.ofx'),
     ('test_amex', 'amex.ofx'),
     ('test_fidelity', 'fidelity.ofx'),
+    ('test_fidelity_ira', 'fidelity-ira.ofx'),
     ('test_non_default_capital_gains', 'vanguard401k.ofx'),
 ]
 

@@ -265,18 +265,18 @@ class PostingDatabase(object):
     def _date_currency_key(self, entry: Transaction, mp: MatchablePosting) -> DateCurrencyKey:
         pw = get_posting_weight(mp.posting)
         currency = ""
-        if pw:
+        if pw is not None:
             currency = pw.currency
         return (_date_key(entry, mp), currency)
 
-    def _search_posting(self, entry: Transaction, mp: MatchablePosting):
+    def _search_posting(self, key: SourcePostingIds, entry: Transaction, mp: MatchablePosting):
         pw = get_posting_weight(mp.posting)
         number = None
-        if pw:
+        if pw is not None:
             number = pw.number
         return SearchPosting(
             number=number,
-            key=_entry_and_posting_ids_key(entry, mp),
+            key=key,
             entry=entry,
             mp=mp)
 
@@ -296,8 +296,9 @@ class PostingDatabase(object):
         if weight is None:
             return
 
+        sp = self._search_posting(source_posting_ids, entry, mp)
         for dc in self.fuzz_date_currency_key(self._date_currency_key(entry, mp)):
-            self._date_currency[dc].append(self._search_posting(entry, mp))
+            self._date_currency[dc].append(sp)
             self._date_currency_dirty[dc] = True
 
     def get_date_currency_postings(self, key: DateCurrencyKey) -> List[SearchPosting]:
@@ -313,7 +314,7 @@ class PostingDatabase(object):
                         negate=False) -> Iterable[SearchPosting]:
         # Prepare postings for searching
         postings_date_currency = collections.defaultdict(list)
-        
+
         for mp in mps:
             weight = get_posting_weight(mp.posting)
             if weight is None:
@@ -390,9 +391,9 @@ class PostingDatabase(object):
                 if group is not None:
                     group.pop(source_posting_ids, None)
 
-        for dc in self.fuzz_date_currency_key(
-                self._date_currency_key(entry, mp)):
-            self._date_currency[dc].remove(self._search_posting(entry, mp))
+        sp = self._search_posting(source_posting_ids, entry, mp)
+        for dc in self.fuzz_date_currency_key(self._date_currency_key(entry, mp)):
+            self._date_currency[dc].remove(sp)
 
     def remove_transaction(self, transaction: Transaction):
         for mp in get_matchable_postings_from_transaction(
@@ -443,7 +444,11 @@ class PostingDatabase(object):
         if cur_matches is not None:
             lower_bound = bisect.bisect_left(cur_matches, (lower, tuple(), None, None))
             upper_bound = bisect.bisect_right(cur_matches, (upper, (sys.maxsize,), None, None), lo=lower_bound)
-            for sp in cur_matches[lower_bound-1 if lower_bound > 0 else 0:upper_bound]:
+            for sp in cur_matches[lower_bound:upper_bound]:
+                assert abs(sp.number - amount.number) <= self.fuzzy_match_amount, (
+                    f'Bug in matching algorithm: {sp} is not within '
+                    + f'{self.fuzzy_match_amount} of {amount}')
+
                 posting = sp.mp.posting
                 # Verify that the account is compatible.
                 if not are_accounts_mergeable(account, posting.account):
@@ -456,8 +461,7 @@ class PostingDatabase(object):
                     if posting_date and posting_date != date:
                         continue
 
-                key = _entry_and_posting_ids_key(sp.entry, sp.mp)
-                matches[key] = (sp.entry, sp.mp)
+                matches[sp.key] = (sp.entry, sp.mp)
         return matches
 
     def _get_weight_matches(
@@ -1485,8 +1489,9 @@ def get_combined_transactions(txns: Tuple[Transaction, Transaction],
     for match_sets in itertools.product(*match_groups.values()):
         combined_matches = sum((match_set.matches for match_set in match_sets),
                                [])  # type: PostingMatches
-        combined_removals = sum((match_set.removals
-                                 for match_set in match_sets), ())
+        combined_removals: MatchablePostings = tuple(removal
+                                                    for match_set in match_sets
+                                                    for removal in match_set.removals)
         if not combined_matches:
             continue
         for m in combined_matches:
